@@ -29,6 +29,7 @@ library(tidyverse)
 library(janitor)
 library(skimr)
 library(randomForest)
+library(caret)
 
 # Set seed value of random number generator here:
 set.seed(76)
@@ -92,7 +93,9 @@ training <- training %>%
 Questions to ask yourself or discuss with your peers
 
 1. Why didn't I apply the same change to the `test` set?
+We can just as easily exponentiate the predictions back out, which doesn't require changing the test set at all. 
 1. If I transformed the outcome variable now, what will I have to make sure to do later on?
+You'd have to exponentiate it back into the original variable space before submission. 
 
 
 ## Select only numerical predictors
@@ -174,6 +177,13 @@ KitchenAbvGr + TotRmsAbvGrd + Fireplaces + GarageYrBlt + GarageCars + GarageArea
 WoodDeckSF + OpenPorchSF + EnclosedPorch + ThirdSsnPorch + ScreenPorch + PoolArea + 
 MiscVal + MoSold + YrSold" %>% 
   as.formula()
+
+# Define cross-validation settings: 10-fold CV
+fit_control <- trainControl(method = "cv", number = 10)
+
+# Setup search grid of "tuning" parameters
+mtry <- 2:10
+tunegrid <- expand.grid(.mtry = mtry)
 ```
 
 
@@ -186,8 +196,23 @@ MiscVal + MoSold + YrSold" %>%
 
 Fit one Random Forest model `model_rf` using any approach you want.
 
-```{r}
-
+```{r, cache=TRUE}
+model_rf_caret <- caret::train(
+  # Model formula
+  form = model_formula,
+  # Training data
+  data = training, 
+  # Set method to randomForests. Note: this is where you can switch out to
+  # different methods
+  method = "rf",
+  # Score/error metric used:
+  metric = "RMSE",
+  # Cross-validation settings:
+  trControl = fit_control,
+  # Search grid of tuning parameters
+  tuneGrid = tunegrid
+  )
+model_rf_caret
 ```
 
 
@@ -201,9 +226,17 @@ Fit one Random Forest model `model_rf` using any approach you want.
 Using `model_rf` make predictions and submit to Kaggle.
 
 ```{r}
-
+test <- test %>% 
+  mutate(
+    logSalePrice_hat_rf_caret = predict(model_rf_caret, test),
+    SalePrice_hat_rf_caret = exp(logSalePrice_hat_rf_caret) -1
+  )
+submission_rf_caret <- test %>%
+  mutate(SalePrice = SalePrice_hat_rf_caret) %>%
+  select(Id, SalePrice)
+write_csv(submission_rf_caret, "data/submission_rf_caret.csv")
 ```
 
 
-![](images/score_screenshot_naive.png){ width=100% }
+![](images/score_screenshot_random_forest.png){ width=100% }
 
